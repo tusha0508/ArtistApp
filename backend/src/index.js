@@ -9,6 +9,7 @@ import userRoutes from "./routes/userRoutes.js";               // profile routes
 import artistAuthRoutes from "./routes/artistAuthRoutes.js";   // register/login for artists
 import artistRoutes from "./routes/artistRoutes.js";           // artist profile routes (me, update, public GET, search, delete)
 import { connectDB } from "./lib/db.js";
+import { startKeepAliveJob } from "./lib/keepAlive.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
@@ -68,7 +69,13 @@ if (process.env.NODE_ENV !== "production") {
 connectDB()
   .then(() => {
     app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+      const serverUrl = process.env.SERVER_URL || `http://localhost:${PORT}`;
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+      
+      // Start keep-alive job for Render free tier (only in production)
+      if (process.env.NODE_ENV === "production") {
+        startKeepAliveJob(serverUrl);
+      }
     });
   })
   .catch((err) => {
