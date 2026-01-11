@@ -1,0 +1,323 @@
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import Artist from "../src/models/Artist.js";
+import "dotenv/config";
+
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/artistapp";
+
+const artistData = [
+  {
+    fullName: "Raj Kumar",
+    username: "raj_performer",
+    dob: new Date("1995-03-15"),
+    email: "raj@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Raj+Kumar&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Mumbai",
+    category: "Singer",
+    yearsOfExperience: 5,
+    bio: "Professional singer with 5 years of experience",
+    hourlyRate: 2000,
+    skills: ["Singing", "Vocal Training"],
+  },
+  {
+    fullName: "Priya Sharma",
+    username: "priya_dancer",
+    dob: new Date("1998-07-22"),
+    email: "priya@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Priya+Sharma&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Delhi",
+    category: "Dancer",
+    yearsOfExperience: 4,
+    bio: "Contemporary and classical dancer",
+    hourlyRate: 1500,
+    skills: ["Contemporary Dance", "Classical Dance"],
+  },
+  {
+    fullName: "Arjun Reddy",
+    username: "arjun_guitarist",
+    dob: new Date("1994-05-10"),
+    email: "arjun@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Arjun+Reddy&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Bangalore",
+    category: "Musician",
+    yearsOfExperience: 7,
+    bio: "Expert guitarist - all genres",
+    hourlyRate: 1800,
+    skills: ["Guitar", "Music Production"],
+  },
+  {
+    fullName: "Neha Patel",
+    username: "neha_makeup",
+    dob: new Date("1996-11-18"),
+    email: "neha@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Neha+Patel&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Pune",
+    category: "Makeup Artist",
+    yearsOfExperience: 6,
+    bio: "Professional makeup artist for all occasions",
+    hourlyRate: 1200,
+    skills: ["Bridal Makeup", "Party Makeup"],
+  },
+  {
+    fullName: "Vikram Singh",
+    username: "vikram_comedian",
+    dob: new Date("1992-02-28"),
+    email: "vikram@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Vikram+Singh&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Mumbai",
+    category: "Comedian",
+    yearsOfExperience: 8,
+    bio: "Stand-up comedian with a twist",
+    hourlyRate: 3000,
+    skills: ["Stand-up Comedy", "Event Hosting"],
+  },
+  {
+    fullName: "Isha Verma",
+    username: "isha_photographer",
+    dob: new Date("1997-09-05"),
+    email: "isha@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Isha+Verma&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Hyderabad",
+    category: "Photographer",
+    yearsOfExperience: 5,
+    bio: "Creative photographer specializing in portraits",
+    hourlyRate: 1500,
+    skills: ["Portrait Photography", "Event Photography"],
+  },
+  {
+    fullName: "Rohan Gupta",
+    username: "rohan_videographer",
+    dob: new Date("1995-12-12"),
+    email: "rohan@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Rohan+Gupta&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Mumbai",
+    category: "Videographer",
+    yearsOfExperience: 6,
+    bio: "Professional videographer and editor",
+    hourlyRate: 2500,
+    skills: ["Video Editing", "Cinematography"],
+  },
+  {
+    fullName: "Divya Nair",
+    username: "divya_choreographer",
+    dob: new Date("1996-06-20"),
+    email: "divya@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Divya+Nair&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Kochi",
+    category: "Choreographer",
+    yearsOfExperience: 5,
+    bio: "Talented choreographer for weddings and events",
+    hourlyRate: 2000,
+    skills: ["Choreography", "Dance Training"],
+  },
+  {
+    fullName: "Aditya Desai",
+    username: "aditya_pianist",
+    dob: new Date("1993-04-14"),
+    email: "aditya@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Aditya+Desai&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Delhi",
+    category: "Musician",
+    yearsOfExperience: 9,
+    bio: "Classical and contemporary pianist",
+    hourlyRate: 2200,
+    skills: ["Piano", "Music Composition"],
+  },
+  {
+    fullName: "Sapna Iyer",
+    username: "sapna_voiceartist",
+    dob: new Date("1998-01-30"),
+    email: "sapna@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Sapna+Iyer&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Bangalore",
+    category: "Voice Artist",
+    yearsOfExperience: 3,
+    bio: "Professional voice artist for commercials and dubbing",
+    hourlyRate: 1300,
+    skills: ["Voice Acting", "Dubbing"],
+  },
+  {
+    fullName: "Kabir Khan",
+    username: "kabir_artist",
+    dob: new Date("1991-08-22"),
+    email: "kabir@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Kabir+Khan&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Lucknow",
+    category: "Artist",
+    yearsOfExperience: 10,
+    bio: "Skilled artist - paintings and digital art",
+    hourlyRate: 1700,
+    skills: ["Painting", "Digital Art"],
+  },
+  {
+    fullName: "Meera Chopra",
+    username: "meera_eventplanner",
+    dob: new Date("1997-03-10"),
+    email: "meera@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Meera+Chopra&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Chennai",
+    category: "Event Planner",
+    yearsOfExperience: 4,
+    bio: "Professional event planner for all types of events",
+    hourlyRate: 1800,
+    skills: ["Event Planning", "Decoration"],
+  },
+  {
+    fullName: "Nikhil Wagh",
+    username: "nikhil_musician",
+    dob: new Date("1994-10-15"),
+    email: "nikhil@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Nikhil+Wagh&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Pune",
+    category: "Musician",
+    yearsOfExperience: 7,
+    bio: "Drummer and percussionist with live experience",
+    hourlyRate: 1500,
+    skills: ["Drums", "Percussion"],
+  },
+  {
+    fullName: "Pooja Prabhu",
+    username: "pooja_designer",
+    dob: new Date("1996-05-25"),
+    email: "pooja@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Pooja+Prabhu&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Bangalore",
+    category: "Designer",
+    yearsOfExperience: 5,
+    bio: "Fashion and graphic designer",
+    hourlyRate: 1600,
+    skills: ["Graphic Design", "Fashion Design"],
+  },
+  {
+    fullName: "Ravi Shankar",
+    username: "ravi_actor",
+    dob: new Date("1990-07-18"),
+    email: "ravi@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Ravi+Shankar&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Mumbai",
+    category: "Actor",
+    yearsOfExperience: 12,
+    bio: "Experienced theatre and film actor",
+    hourlyRate: 3500,
+    skills: ["Acting", "Theatre"],
+  },
+  {
+    fullName: "Anjali Singh",
+    username: "anjali_instructor",
+    dob: new Date("1995-12-08"),
+    email: "anjali@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Anjali+Singh&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Delhi",
+    category: "Instructor",
+    yearsOfExperience: 6,
+    bio: "Yoga and fitness instructor",
+    hourlyRate: 800,
+    skills: ["Yoga", "Fitness Training"],
+  },
+  {
+    fullName: "Sanjay Mathur",
+    username: "sanjay_animator",
+    dob: new Date("1993-09-20"),
+    email: "sanjay@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Sanjay+Mathur&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Hyderabad",
+    category: "Animator",
+    yearsOfExperience: 8,
+    bio: "3D and 2D animator for various projects",
+    hourlyRate: 2000,
+    skills: ["3D Animation", "2D Animation"],
+  },
+  {
+    fullName: "Ritika Bansal",
+    username: "ritika_writer",
+    dob: new Date("1997-02-14"),
+    email: "ritika@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Ritika+Bansal&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "New Delhi",
+    category: "Writer",
+    yearsOfExperience: 4,
+    bio: "Content writer and scriptwriter",
+    hourlyRate: 1000,
+    skills: ["Content Writing", "Script Writing"],
+  },
+  {
+    fullName: "Harsh Patel",
+    username: "harsh_djmixer",
+    dob: new Date("1996-11-11"),
+    email: "harsh@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Harsh+Patel&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Ahmedabad",
+    category: "DJ",
+    yearsOfExperience: 5,
+    bio: "Professional DJ for parties and weddings",
+    hourlyRate: 2500,
+    skills: ["DJ Mixing", "Music Production"],
+  },
+  {
+    fullName: "Shreya Deshmukh",
+    username: "shreya_florist",
+    dob: new Date("1998-06-16"),
+    email: "shreya@example.com",
+    password: "password123",
+    profileImage: "https://ui-avatars.com/api/?name=Shreya+Deshmukh&background=667eea&color=fff&bold=true&size=200&format=png",
+    city: "Pune",
+    category: "Florist",
+    yearsOfExperience: 3,
+    bio: "Creative floral designer for all occasions",
+    hourlyRate: 900,
+    skills: ["Floral Design", "Event Decoration"],
+  },
+];
+
+const seedArtists = async () => {
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log("Connected to MongoDB");
+
+    // Clear existing artists
+    await Artist.deleteMany({});
+    console.log("Cleared existing artists");
+
+    // Hash passwords and insert artists
+    const artistsWithHashedPasswords = await Promise.all(
+      artistData.map(async (artist) => {
+        const hashedPassword = await bcrypt.hash(artist.password, 10);
+        return { ...artist, password: hashedPassword };
+      })
+    );
+
+    const insertedArtists = await Artist.insertMany(artistsWithHashedPasswords);
+    console.log(`✅ Successfully added ${insertedArtists.length} test artists!`);
+
+    insertedArtists.forEach((artist) => {
+      console.log(`  - ${artist.fullName} (@${artist.username}) - ${artist.email}`);
+    });
+
+    await mongoose.connection.close();
+    console.log("Database connection closed");
+  } catch (error) {
+    console.error("Error seeding artists:", error);
+    process.exit(1);
+  }
+};
+
+seedArtists();
