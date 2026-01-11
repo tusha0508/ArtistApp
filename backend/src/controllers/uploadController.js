@@ -1,6 +1,5 @@
 // controllers/uploadController.js
 import cloudinary from "../lib/cloudinary.js";
-import { rewriteTextWithAI } from "../services/aiRewriteService.js";
 
 /**
  * Generate signed upload params for Cloudinary
