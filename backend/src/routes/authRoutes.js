@@ -2,7 +2,7 @@
 import express from "express";
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
-import { sendOTPEmail } from "../services/emailService.js";
+import { sendOTPEmail, sendWelcomeEmail } from "../services/emailService.js";
 import { logLoginSession, logLogoutSession, getUserLoginHistory, getClientIP } from "../lib/sessionLogger.js";
 
 const router = express.Router();
@@ -38,6 +38,9 @@ router.post("/register", async (req, res) => {
       tncAcceptedAt: new Date()
     });
     await user.save();
+
+    // Send welcome email
+    await sendWelcomeEmail({ to: email, username, role: "user" });
 
     const token = generateAuthToken(user._id, "user");
 

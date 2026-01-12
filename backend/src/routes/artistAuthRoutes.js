@@ -2,7 +2,7 @@
 import express from "express";
 import Artist from "../models/Artist.js";
 import jwt from "jsonwebtoken";
-import { sendOTPEmail } from "../services/emailService.js";
+import { sendOTPEmail, sendWelcomeEmail } from "../services/emailService.js";
 import { logLoginSession, logLogoutSession, getUserLoginHistory } from "../lib/sessionLogger.js";
 
 const router = express.Router();
@@ -53,6 +53,9 @@ router.post("/register", async (req, res) => {
       tncAcceptedAt: new Date()
     });
     await artist.save();
+
+    // Send welcome email
+    await sendWelcomeEmail({ to: email, username, role: "artist" });
 
     const token = generateAuthToken(artist._id, "artist");
     res.status(201).json({
