@@ -54,8 +54,10 @@ router.post("/register", async (req, res) => {
     });
     await artist.save();
 
-    // Send welcome email
-    await sendWelcomeEmail({ to: email, username, role: "artist" });
+    // Send welcome email in background (non-blocking)
+    sendWelcomeEmail({ to: email, username, role: "artist" }).catch(err => {
+      console.error("Failed to send welcome email:", err.message);
+    });
 
     const token = generateAuthToken(artist._id, "artist");
     res.status(201).json({

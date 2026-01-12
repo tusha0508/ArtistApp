@@ -39,8 +39,10 @@ router.post("/register", async (req, res) => {
     });
     await user.save();
 
-    // Send welcome email
-    await sendWelcomeEmail({ to: email, username, role: "user" });
+    // Send welcome email in background (non-blocking)
+    sendWelcomeEmail({ to: email, username, role: "user" }).catch(err => {
+      console.error("Failed to send welcome email:", err.message);
+    });
 
     const token = generateAuthToken(user._id, "user");
 
