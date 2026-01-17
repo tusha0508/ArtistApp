@@ -41,8 +41,16 @@ const loginSessionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "logged_out", "expired"],
+      enum: ["active", "logged_out", "expired", "failed"],
       default: "active",
+    },
+    loginSuccessful: {
+      type: Boolean,
+      default: true,
+    },
+    failureReason: {
+      type: String,
+      default: null,
     },
     lastActivityTime: {
       type: Date,

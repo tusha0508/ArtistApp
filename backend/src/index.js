@@ -14,6 +14,7 @@ import portfolioRoutes from "./routes/portfolioRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -37,6 +38,7 @@ app.use("/api/artists", artistRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payments", paymentRoutes);
 // handle invalid JSON parse errors from express.json
 app.use((err, req, res, next) => {
   if (err && err.type === "entity.parse.failed") {

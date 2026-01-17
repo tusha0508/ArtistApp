@@ -15,7 +15,7 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// POST /api/auth/register
+// POST /api/auth/register - Request signup OTP
 router.post("/register", async (req, res) => {
   try {
     const { username, email, password, tncAccepted } = req.body;
@@ -25,30 +25,69 @@ router.post("/register", async (req, res) => {
 
     if (password.length < 6) return res.status(400).json({ message: "Password too short" });
 
-    if (await User.findOne({ email })) return res.status(400).json({ message: "Email exists" });
-    if (await User.findOne({ username })) return res.status(400).json({ message: "Username exists" });
+    // Check if email or username already exists
+    const existingEmail = await User.findOne({ email });
+    const existingUsername = await User.findOne({ username });
+    
+    if (existingEmail) return res.status(400).json({ message: "Email already registered" });
+    if (existingUsername) return res.status(400).json({ message: "Username already taken" });
 
+    // Check for pending signups (unverified accounts)
+    const pendingSignup = await User.findOne({ email, isEmailVerified: false });
+    if (pendingSignup) {
+      // Re-send OTP for existing pending signup
+      const otp = generateOTP();
+      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+      pendingSignup.signupOTP = otp;
+      pendingSignup.signupOTPExpiry = otpExpiry;
+      pendingSignup.signupOTPAttempts = 0;
+      await pendingSignup.save();
+
+      await sendOTPEmail({
+        to: email,
+        otp,
+        userName: username,
+        isSignup: true,
+      });
+
+      return res.status(200).json({ message: "OTP sent to your email. Please verify to complete signup." });
+    }
+
+    // Create temporary user account (not verified)
     const profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=667eea&color=fff&bold=true&size=200&format=png`;
-    const user = new User({ 
-      username, 
-      email, 
-      password, 
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    const user = new User({
+      username,
+      email,
+      password,
       profileImage,
       tncAccepted: true,
-      tncAcceptedAt: new Date()
+      tncAcceptedAt: new Date(),
+      signupOTP: otp,
+      signupOTPExpiry: otpExpiry,
+      signupOTPAttempts: 0,
+      isEmailVerified: false,
     });
     await user.save();
 
-    // Send welcome email in background (non-blocking)
-    sendWelcomeEmail({ to: email, username, role: "user" }).catch(err => {
-      console.error("Failed to send welcome email:", err.message);
+    // Send signup OTP email
+    await sendOTPEmail({
+      to: email,
+      otp,
+      userName: username,
+      isSignup: true,
+    }).catch(err => {
+      console.error("⚠️ Failed to send signup OTP email:", err.message);
+      console.error("📧 Email details - TO:", email, "OTP:", otp);
+      // Still return success to user but log the error
+      // User should check spam folder or use resend OTP
     });
 
-    const token = generateAuthToken(user._id, "user");
-
-    return res.status(201).json({
-      token,
-      user: { _id: user._id, username: user.username, email: user.email, profileImage: user.profileImage, createdAt: user.createdAt },
+    return res.status(200).json({
+      message: "OTP sent to your email. Please verify to complete signup.",
+      tempUserId: user._id,
     });
   } catch (err) {
     console.error("User register error:", err);
@@ -56,7 +95,104 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// POST /api/auth/login
+// POST /api/auth/verify-signup-otp - Verify signup OTP and complete registration
+router.post("/verify-signup-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
+
+    const user = await User.findOne({ email, isEmailVerified: false });
+    if (!user) return res.status(404).json({ message: "User not found or already verified" });
+
+    // Check OTP expiry
+    if (!user.signupOTPExpiry || new Date() > user.signupOTPExpiry) {
+      return res.status(400).json({ message: "OTP has expired. Please request a new one" });
+    }
+
+    // Check OTP attempts
+    if (user.signupOTPAttempts >= 3) {
+      return res.status(400).json({ message: "Too many incorrect attempts. Please request a new OTP" });
+    }
+
+    // Verify OTP
+    if (user.signupOTP !== otp) {
+      user.signupOTPAttempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // Mark email as verified and clear OTP fields
+    user.isEmailVerified = true;
+    user.signupOTP = null;
+    user.signupOTPExpiry = null;
+    user.signupOTPAttempts = 0;
+    await user.save();
+
+    // Send welcome email
+    await sendWelcomeEmail({
+      to: user.email,
+      username: user.username,
+      role: "user",
+    }).catch(err => {
+      console.error("Failed to send welcome email:", err.message);
+    });
+
+    // Generate auth token
+    const token = generateAuthToken(user._id, "user");
+
+    return res.status(200).json({
+      message: "Email verified successfully. Account created!",
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        profileImage: user.profileImage,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Verify signup OTP error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// POST /api/auth/resend-signup-otp - Resend signup OTP
+router.post("/resend-signup-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email, isEmailVerified: false });
+    if (!user) return res.status(404).json({ message: "User not found or already verified" });
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.signupOTP = otp;
+    user.signupOTPExpiry = otpExpiry;
+    user.signupOTPAttempts = 0;
+    await user.save();
+
+    // Send OTP email
+    await sendOTPEmail({
+      to: email,
+      otp,
+      userName: user.username,
+      isSignup: true,
+    }).catch(err => {
+      console.error("⚠️ Failed to send resend signup OTP email:", err.message);
+      console.error("📧 Email details - TO:", email, "OTP:", otp);
+      // Still return success to user
+    });
+
+    return res.status(200).json({ message: "OTP sent to your email" });
+  } catch (err) {
+    console.error("Resend signup OTP error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -69,6 +205,17 @@ router.post("/login", async (req, res) => {
     if (!user) {
       await logLoginSession(req, null, "user", email, false, "User not found");
       return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      await logLoginSession(req, user._id, "user", email, false, "Email not verified");
+      return res.status(403).json({ 
+        message: "Please verify your email first. Check your inbox for the verification code.",
+        needsEmailVerification: true,
+        email: user.email,
+        tempUserId: user._id,
+      });
     }
 
     const valid = await user.comparePassword(password);

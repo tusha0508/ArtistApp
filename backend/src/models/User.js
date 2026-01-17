@@ -38,6 +38,22 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
+    signupOTP: {
+        type: String,
+        default: null,
+    },
+    signupOTPExpiry: {
+        type: Date,
+        default: null,
+    },
+    signupOTPAttempts: {
+        type: Number,
+        default: 0,
+    },
+    isEmailVerified: {
+        type: Boolean,
+        default: false,
+    },
     tncAccepted: {
         type: Boolean,
         default: false,

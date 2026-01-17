@@ -1,6 +1,6 @@
 // routes/uploadRoutes.js
 import express from "express";
-import { getSignedUpload, rewriteText } from "../controllers/uploadController.js";
+import { getSignedUpload, rewriteText, validateUpload } from "../controllers/uploadController.js";
 import protectRoute from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -14,6 +14,18 @@ router.post(
   "/sign",
   protectRoute(["artist", "user"]),
   getSignedUpload
+);
+
+/**
+ * POST /api/uploads/validate
+ * Body: { filename, contentType, fileSizeMB, videoDurationSeconds }
+ * Auth: artist OR user
+ * Returns: { valid: true } or error
+ */
+router.post(
+  "/validate",
+  protectRoute(["artist", "user"]),
+  validateUpload
 );
 
 /**

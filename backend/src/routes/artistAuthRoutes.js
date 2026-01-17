@@ -15,7 +15,7 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// POST /api/artists/register
+// POST /api/artists/register - Request signup OTP
 router.post("/register", async (req, res) => {
   try {
     const { email, username, password, fullName, city, dob, skills, tncAccepted } = req.body;
@@ -27,11 +27,33 @@ router.post("/register", async (req, res) => {
 
     if (password.length < 6) return res.status(400).json({ message: "Password too short" });
 
-    const existingEmail = await Artist.findOne({ email });
-    if (existingEmail) return res.status(400).json({ message: "Email already exists" });
+    // Check if email or username already exists (verified accounts only)
+    const existingEmail = await Artist.findOne({ email, isEmailVerified: true });
+    if (existingEmail) return res.status(400).json({ message: "Email already registered" });
 
-    const existingUsername = await Artist.findOne({ username });
-    if (existingUsername) return res.status(400).json({ message: "Username already exists" });
+    const existingUsername = await Artist.findOne({ username, isEmailVerified: true });
+    if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+
+    // Check for pending signups
+    const pendingSignup = await Artist.findOne({ email, isEmailVerified: false });
+    if (pendingSignup) {
+      // Re-send OTP for existing pending signup
+      const otp = generateOTP();
+      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+      pendingSignup.signupOTP = otp;
+      pendingSignup.signupOTPExpiry = otpExpiry;
+      pendingSignup.signupOTPAttempts = 0;
+      await pendingSignup.save();
+
+      await sendOTPEmail({
+        to: email,
+        otp,
+        userName: fullName,
+        isSignup: true,
+      });
+
+      return res.status(200).json({ message: "OTP sent to your email. Please verify to complete signup." });
+    }
 
     const profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=667eea&color=fff&bold=true&size=200&format=png`;
     const normalizedSkills = Array.isArray(skills)
@@ -40,39 +62,43 @@ router.post("/register", async (req, res) => {
       ? skills.split(",").map((s) => s.trim()).filter(Boolean)
       : [];
 
-    const artist = new Artist({ 
-      email, 
-      username, 
-      password, 
-      fullName, 
-      city, 
-      dob, 
-      profileImage, 
+    // Generate OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    const artist = new Artist({
+      email,
+      username,
+      password,
+      fullName,
+      city,
+      dob,
+      profileImage,
       skills: normalizedSkills,
       tncAccepted: true,
-      tncAcceptedAt: new Date()
+      tncAcceptedAt: new Date(),
+      signupOTP: otp,
+      signupOTPExpiry: otpExpiry,
+      signupOTPAttempts: 0,
+      isEmailVerified: false,
     });
     await artist.save();
 
-    // Send welcome email in background (non-blocking)
-    sendWelcomeEmail({ to: email, username, role: "artist" }).catch(err => {
-      console.error("Failed to send welcome email:", err.message);
+    // Send signup OTP email
+    await sendOTPEmail({
+      to: email,
+      otp,
+      userName: fullName,
+      isSignup: true,
+    }).catch(err => {
+      console.error("⚠️ Failed to send signup OTP email:", err.message);
+      console.error("📧 Email details - TO:", email, "OTP:", otp);
+      // Still return success to user
     });
 
-    const token = generateAuthToken(artist._id, "artist");
-    res.status(201).json({
-      token,
-        artist: {
-        _id: artist._id,
-        username: artist.username,
-        email: artist.email,
-        profileImage: artist.profileImage,
-        fullName: artist.fullName,
-        skills: artist.skills,
-        city: artist.city,
-        dob: artist.dob,
-        createdAt: artist.createdAt,
-      },
+    return res.status(200).json({
+      message: "OTP sent to your email. Please verify to complete signup.",
+      tempArtistId: artist._id,
     });
   } catch (err) {
     console.error("Artist register error:", err);
@@ -95,6 +121,17 @@ router.post("/login", async (req, res) => {
       // Log failed login attempt - artist not found
       await logLoginSession(req, null, "artist", email, false, "Artist not found");
       return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // Check if email is verified
+    if (!artist.isEmailVerified) {
+      await logLoginSession(req, artist._id, "artist", email, false, "Email not verified");
+      return res.status(403).json({ 
+        message: "Please verify your email first. Check your inbox for the verification code.",
+        needsEmailVerification: true,
+        email: artist.email,
+        tempArtistId: artist._id,
+      });
     }
 
     const valid = await artist.comparePassword(password);
@@ -233,6 +270,109 @@ router.post("/reset-password", async (req, res) => {
   } catch (err) {
     console.error("Reset password error:", err);
     return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// POST /api/artists/verify-signup-otp - Verify signup OTP and complete registration
+router.post("/verify-signup-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
+
+    const artist = await Artist.findOne({ email, isEmailVerified: false });
+    if (!artist) return res.status(404).json({ message: "Artist not found or already verified" });
+
+    // Check OTP expiry
+    if (!artist.signupOTPExpiry || new Date() > artist.signupOTPExpiry) {
+      return res.status(400).json({ message: "OTP has expired. Please request a new one" });
+    }
+
+    // Check OTP attempts
+    if (artist.signupOTPAttempts >= 3) {
+      return res.status(400).json({ message: "Too many incorrect attempts. Please request a new OTP" });
+    }
+
+    // Verify OTP
+    if (artist.signupOTP !== otp) {
+      artist.signupOTPAttempts += 1;
+      await artist.save();
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // Mark email as verified and clear OTP fields
+    artist.isEmailVerified = true;
+    artist.signupOTP = null;
+    artist.signupOTPExpiry = null;
+    artist.signupOTPAttempts = 0;
+    await artist.save();
+
+    // Send welcome email
+    await sendWelcomeEmail({
+      to: artist.email,
+      username: artist.username,
+      role: "artist",
+    }).catch(err => {
+      console.error("Failed to send welcome email:", err.message);
+    });
+
+    // Generate auth token
+    const token = generateAuthToken(artist._id, "artist");
+
+    return res.status(200).json({
+      message: "Email verified successfully. Account created!",
+      token,
+      artist: {
+        _id: artist._id,
+        username: artist.username,
+        email: artist.email,
+        profileImage: artist.profileImage,
+        fullName: artist.fullName,
+        skills: artist.skills,
+        city: artist.city,
+        dob: artist.dob,
+        createdAt: artist.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Verify signup OTP error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// POST /api/artists/resend-signup-otp - Resend signup OTP
+router.post("/resend-signup-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const artist = await Artist.findOne({ email, isEmailVerified: false });
+    if (!artist) return res.status(404).json({ message: "Artist not found or already verified" });
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    artist.signupOTP = otp;
+    artist.signupOTPExpiry = otpExpiry;
+    artist.signupOTPAttempts = 0;
+    await artist.save();
+
+    // Send OTP email
+    await sendOTPEmail({
+      to: email,
+      otp,
+      userName: artist.fullName,
+      isSignup: true,
+    }).catch(err => {
+      console.error("⚠️ Failed to send resend signup OTP email:", err.message);
+      console.error("📧 Email details - TO:", email, "OTP:", otp);
+      // Still return success to user
+    });
+
+    return res.status(200).json({ message: "OTP sent to your email" });
+  } catch (err) {
+    console.error("Resend signup OTP error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 

@@ -69,6 +69,20 @@ export const searchArtists = async (req, res) => {
 
     const criteria = [];
 
+    // Exclude shadow-banned artists
+    criteria.push({
+      $or: [
+        { "shadowBan.isShadowBanned": false },
+        { "shadowBan.isShadowBanned": { $exists: false } },
+        {
+          $and: [
+            { "shadowBan.isShadowBanned": true },
+            { "shadowBan.bannedUntil": { $lt: new Date() } }, // Ban expired
+          ],
+        },
+      ],
+    });
+
     if (q) {
       const regex = new RegExp(q, "i");
       criteria.push({ $or: [{ username: regex }, { fullName: regex }, { city: regex }] });
