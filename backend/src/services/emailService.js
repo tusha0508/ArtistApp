@@ -1,6 +1,8 @@
 // services/emailService.js
 import nodemailer from "nodemailer";
 
+import nodemailer from "nodemailer";
+
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
@@ -9,8 +11,8 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  connectionTimeout: 10000, // 10 seconds
-  socketTimeout: 10000, // 10 seconds
+  connectionTimeout: 60000, // 60 seconds
+  socketTimeout: 60000, // 60 seconds
   tls: {
     rejectUnauthorized: false // Allow self-signed certificates
   }
@@ -22,6 +24,7 @@ transporter.verify((error, success) => {
     console.error("❌ Email service connection failed:", error.message);
     console.log("📧 Email credentials - USER:", process.env.EMAIL_USER);
     console.log("🔑 Email credentials - HOST:", process.env.EMAIL_HOST + ":" + process.env.EMAIL_PORT);
+    console.log("💡 If using Gmail, make sure 2FA is enabled and you're using an App Password");
   } else {
     console.log("✅ Email service is ready to send messages");
   }
