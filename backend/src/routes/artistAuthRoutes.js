@@ -18,14 +18,19 @@ const generateOTP = () => {
 // POST /api/artists/register - Request signup OTP
 router.post("/register", async (req, res) => {
   try {
-    const { email, username, password, fullName, city, dob, skills, tncAccepted } = req.body;
-    if (!email || !username || !password || !fullName || !city || !dob) {
+    const { email, username, password, fullName, city, pincode, dob, skills, tncAccepted } = req.body;
+    if (!email || !username || !password || !fullName || !city || !pincode || !dob) {
       return res.status(400).json({ message: "Please fill all fields" });
     }
 
     if (!tncAccepted) return res.status(400).json({ message: "You must accept Terms and Conditions to proceed" });
 
     if (password.length < 6) return res.status(400).json({ message: "Password too short" });
+
+    // Validate pincode format
+    if (!/^\d{6}$/.test(pincode)) {
+      return res.status(400).json({ message: "Pincode must be exactly 6 digits" });
+    }
 
     // Check if email or username already exists (verified accounts only)
     const existingEmail = await Artist.findOne({ email, isEmailVerified: true });
@@ -72,6 +77,7 @@ router.post("/register", async (req, res) => {
       password,
       fullName,
       city,
+      pincode,
       dob,
       profileImage,
       skills: normalizedSkills,

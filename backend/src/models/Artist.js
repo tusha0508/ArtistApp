@@ -37,6 +37,12 @@ const artistSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    pincode: {
+      type: String,
+      required: true,
+      trim: true,
+      match: [/^\d{6}$/, 'Pincode must be exactly 6 digits'],
+    },
     skills: {
       type: [String],
       default: [],

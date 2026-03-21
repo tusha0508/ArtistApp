@@ -7,6 +7,7 @@ import {
   getArtistById,
   searchArtists,
   getCities,
+  discoverArtistsByPincode,
   deleteMeArtist,
   refreshTokenArtist,
 } from "../controllers/artistController.js";
@@ -23,6 +24,7 @@ router.post("/refresh", refreshTokenArtist);
 
 // public
 router.get("/cities", getCities);
+router.get("/discover", discoverArtistsByPincode); // /api/artists/discover?pincode=123456
 router.get("/", searchArtists); // /api/artists?search=name
 router.get("/:id", getArtistById);
 

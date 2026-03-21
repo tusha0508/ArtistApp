@@ -130,6 +130,74 @@ export const getCities = async (req, res) => {
   }
 };
 
+export const discoverArtistsByPincode = async (req, res) => {
+  try {
+    const { pincode } = req.query;
+    if (!pincode || !/^\d{6}$/.test(pincode)) {
+      return res.status(400).json({ message: "Valid 6-digit pincode is required" });
+    }
+
+    // Exclude shadow-banned artists
+    const baseCriteria = {
+      $or: [
+        { "shadowBan.isShadowBanned": false },
+        { "shadowBan.isShadowBanned": { $exists: false } },
+        {
+          $and: [
+            { "shadowBan.isShadowBanned": true },
+            { "shadowBan.bannedUntil": { $lt: new Date() } },
+          ],
+        },
+      ],
+    };
+
+    // First, get artists with exact pincode match
+    const exactMatchArtists = await Artist.find({
+      ...baseCriteria,
+      pincode: pincode,
+    })
+      .select("-password")
+      .limit(50);
+
+    // Then, get nearby pincodes (simple logic: same first 4 digits + variations)
+    // For more sophisticated nearby logic, you'd need a pincode database or API
+    const nearbyPincodes = [];
+    const basePin = pincode.substring(0, 4);
+
+    // Generate some nearby variations (this is a simplified approach)
+    for (let i = -5; i <= 5; i++) {
+      if (i === 0) continue; // Skip exact match
+      const variation = (parseInt(pincode.substring(4, 6)) + i).toString().padStart(2, '0');
+      if (variation.length === 2 && variation >= '00' && variation <= '99') {
+        nearbyPincodes.push(basePin + variation);
+      }
+    }
+
+    const nearbyArtists = await Artist.find({
+      ...baseCriteria,
+      pincode: { $in: nearbyPincodes },
+    })
+      .select("-password")
+      .limit(50);
+
+    // Combine results: exact matches first, then nearby
+    const allArtists = [
+      ...exactMatchArtists,
+      ...nearbyArtists.filter(artist => !exactMatchArtists.some(exact => exact._id.equals(artist._id))),
+    ];
+
+    return res.status(200).json({
+      pincode,
+      exactMatches: exactMatchArtists.length,
+      nearbyMatches: nearbyArtists.length,
+      artists: allArtists.slice(0, 100), // Limit total results
+    });
+  } catch (err) {
+    console.error("discoverArtistsByPincode error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const deleteMeArtist = async (req, res) => {
   try {
     await Artist.findByIdAndDelete(req.user._id);
