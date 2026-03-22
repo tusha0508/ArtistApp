@@ -18,7 +18,7 @@ const generateOTP = () => {
 // POST /api/artists/register - Request signup OTP
 router.post("/register", async (req, res) => {
   try {
-    const { email, username, password, fullName, city, pincode, dob, skills, tncAccepted } = req.body;
+    const { email, username, password, fullName, city, pincode, dob, skills, artistType, bandDetails, tncAccepted } = req.body;
     if (!email || !username || !password || !fullName || !city || !pincode || !dob) {
       return res.status(400).json({ message: "Please fill all fields" });
     }
@@ -27,9 +27,22 @@ router.post("/register", async (req, res) => {
 
     if (password.length < 6) return res.status(400).json({ message: "Password too short" });
 
-    // Validate pincode format
-    if (!/^\d{6}$/.test(pincode)) {
-      return res.status(400).json({ message: "Pincode must be exactly 6 digits" });
+    // Validate artistType
+    if (!artistType || !["solo", "band"].includes(artistType)) {
+      return res.status(400).json({ message: "Please select a valid artist type (solo or band)" });
+    }
+
+    // Validate band details if artistType is "band"
+    if (artistType === "band") {
+      if (!bandDetails || !bandDetails.bandName || !bandDetails.members) {
+        return res.status(400).json({ message: "Band name and number of members are required for band artists" });
+      }
+      if (bandDetails.members < 1) {
+        return res.status(400).json({ message: "Number of members must be at least 1" });
+      }
+      if (bandDetails.performingSince && (bandDetails.performingSince < 1900 || bandDetails.performingSince > new Date().getFullYear())) {
+        return res.status(400).json({ message: "Performing since year must be between 1900 and current year" });
+      }
     }
 
     // Check if email or username already exists (verified accounts only)
@@ -81,6 +94,8 @@ router.post("/register", async (req, res) => {
       dob,
       profileImage,
       skills: normalizedSkills,
+      artistType,
+      bandDetails: artistType === "band" ? bandDetails : null,
       tncAccepted: true,
       tncAcceptedAt: new Date(),
       signupOTP: otp,

@@ -1,17 +1,25 @@
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
-// Initialize Razorpay
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-  console.warn("⚠️ Razorpay credentials missing in .env file");
-  console.warn("KEY_ID:", process.env.RAZORPAY_KEY_ID ? "✅ Set" : "❌ Missing");
-  console.warn("KEY_SECRET:", process.env.RAZORPAY_KEY_SECRET ? "✅ Set" : "❌ Missing");
-}
+// Initialize Razorpay instance only when needed
+let razorpayInstance = null;
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const getRazorpayInstance = () => {
+  if (!razorpayInstance) {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.warn("⚠️ Razorpay credentials missing in .env file");
+      console.warn("KEY_ID:", process.env.RAZORPAY_KEY_ID ? "✅ Set" : "❌ Missing");
+      console.warn("KEY_SECRET:", process.env.RAZORPAY_KEY_SECRET ? "✅ Set" : "❌ Missing");
+      throw new Error("Razorpay credentials not configured");
+    }
+
+    razorpayInstance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpayInstance;
+};
 
 /**
  * Create Razorpay Order
@@ -31,7 +39,7 @@ export const createRazorpayOrder = async (amount, bookingId, paymentType) => {
       },
     };
 
-    const order = await razorpay.orders.create(options);
+    const order = await getRazorpayInstance().orders.create(options);
     return {
       orderId: order.id,
       amount: order.amount,
@@ -72,7 +80,7 @@ export const verifyRazorpayPayment = (
  */
 export const getPaymentDetails = async (paymentId) => {
   try {
-    const payment = await razorpay.payments.fetch(paymentId);
+    const payment = await getRazorpayInstance().payments.fetch(paymentId);
     return payment;
   } catch (error) {
     console.error("Razorpay Fetch Payment Error:", error);
@@ -85,7 +93,7 @@ export const getPaymentDetails = async (paymentId) => {
  */
 export const createRefund = async (paymentId, refundAmount) => {
   try {
-    const refund = await razorpay.payments.refund(paymentId, {
+    const refund = await getRazorpayInstance().payments.refund(paymentId, {
       amount: Math.round(refundAmount * 100), // Convert to paise
     });
 
@@ -105,7 +113,7 @@ export const createRefund = async (paymentId, refundAmount) => {
  */
 export const getRefundStatus = async (refundId) => {
   try {
-    const refund = await razorpay.refunds.fetch(refundId);
+    const refund = await getRazorpayInstance().refunds.fetch(refundId);
     return {
       refundId: refund.id,
       status: refund.status,
@@ -116,5 +124,3 @@ export const getRefundStatus = async (refundId) => {
     throw new Error("Failed to fetch refund status");
   }
 };
-
-export default razorpay;

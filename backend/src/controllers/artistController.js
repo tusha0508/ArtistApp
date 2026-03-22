@@ -16,6 +16,35 @@ export const updateMeArtist = async (req, res) => {
     const updates = { ...req.body };
     if (updates.password) delete updates.password;
 
+    // Validate artistType if provided
+    if (updates.artistType && !["solo", "band"].includes(updates.artistType)) {
+      return res.status(400).json({ message: "Invalid artist type. Must be 'solo' or 'band'" });
+    }
+
+    // Validate bandDetails if artistType is being set to "band" or if bandDetails are provided
+    if (updates.artistType === "band" || (updates.bandDetails && !updates.artistType)) {
+      const artist = await Artist.findById(req.user._id);
+      const effectiveArtistType = updates.artistType || artist.artistType;
+
+      if (effectiveArtistType === "band") {
+        const bandDetails = updates.bandDetails || artist.bandDetails;
+        if (!bandDetails || !bandDetails.bandName || !bandDetails.members) {
+          return res.status(400).json({ message: "Band name and number of members are required for band artists" });
+        }
+        if (bandDetails.members < 1) {
+          return res.status(400).json({ message: "Number of members must be at least 1" });
+        }
+        if (bandDetails.performingSince && (bandDetails.performingSince < 1900 || bandDetails.performingSince > new Date().getFullYear())) {
+          return res.status(400).json({ message: "Performing since year must be between 1900 and current year" });
+        }
+      }
+    }
+
+    // If switching from band to solo, clear bandDetails
+    if (updates.artistType === "solo") {
+      updates.bandDetails = null;
+    }
+
     const updated = await Artist.findByIdAndUpdate(req.user._id, updates, { new: true }).select("-password");
     return res.status(200).json(updated);
   } catch (err) {
@@ -66,6 +95,7 @@ export const searchArtists = async (req, res) => {
     const q = req.query.search || "";
     const skill = req.query.skill || "";
     const cityFilter = req.query.city || "";
+    const artistTypeFilter = req.query.artistType || ""; // "solo", "band", or ""
 
     const criteria = [];
 
@@ -106,6 +136,10 @@ export const searchArtists = async (req, res) => {
       }
     }
 
+    if (artistTypeFilter && ["solo", "band"].includes(artistTypeFilter)) {
+      criteria.push({ artistType: artistTypeFilter });
+    }
+
     const query = criteria.length ? { $and: criteria } : {};
 
     const artists = await Artist.find(query)
@@ -132,7 +166,7 @@ export const getCities = async (req, res) => {
 
 export const discoverArtistsByPincode = async (req, res) => {
   try {
-    const { pincode } = req.query;
+    const { pincode, artistType } = req.query;
     if (!pincode || !/^\d{6}$/.test(pincode)) {
       return res.status(400).json({ message: "Valid 6-digit pincode is required" });
     }
@@ -145,11 +179,16 @@ export const discoverArtistsByPincode = async (req, res) => {
         {
           $and: [
             { "shadowBan.isShadowBanned": true },
-            { "shadowBan.bannedUntil": { $lt: new Date() } },
+            { "shadowBan.bannedUntil": { $lt: new Date() } }, // Ban expired
           ],
         },
       ],
     };
+
+    // Add artistType filter if provided
+    if (artistType && ["solo", "band"].includes(artistType)) {
+      baseCriteria.artistType = artistType;
+    }
 
     // First, get artists with exact pincode match
     const exactMatchArtists = await Artist.find({

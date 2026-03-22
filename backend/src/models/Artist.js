@@ -48,6 +48,31 @@ const artistSchema = new mongoose.Schema(
       default: [],
       index: true,
     },
+    artistType: {
+      type: String,
+      enum: ["solo", "band"],
+      required: true,
+      default: "solo",
+    },
+    bandDetails: {
+      bandName: {
+        type: String,
+        trim: true,
+      },
+      members: {
+        type: Number,
+        min: 1,
+      },
+      performingSince: {
+        type: Number,
+        min: 1900,
+        max: new Date().getFullYear(),
+      },
+      genre: {
+        type: String,
+        trim: true,
+      },
+    },
     profileImage: {
       type: String,           // Cloudinary URL or placeholder
       default: "",
@@ -113,6 +138,16 @@ artistSchema.pre("save", async function (next) {
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Validate band details when artistType is "band"
+artistSchema.pre("save", function (next) {
+  if (this.artistType === "band") {
+    if (!this.bandDetails || !this.bandDetails.bandName || !this.bandDetails.members) {
+      return next(new Error("Band name and number of members are required for band artists"));
+    }
+  }
   next();
 });
 

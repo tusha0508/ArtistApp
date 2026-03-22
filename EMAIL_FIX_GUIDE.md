@@ -1,15 +1,15 @@
-# Email Service Migration: SMTP → Resend
+# Email Service Migration: Resend → Brevo
 
 ## 🔄 Migration Summary
 
-**Previous:** Nodemailer + SMTP (Gmail/Resend)  
-**New:** Resend API (more reliable, simpler, no SMTP configuration)
+**Previous:** Resend API
+**New:** Brevo API (more reliable, better deliverability)
 
-### Why Resend?
+### Why Brevo?
 - ✅ **Higher deliverability** (trusted provider)
 - ✅ **Simple API** (single endpoint, no transport config)
 - ✅ **Free trial** and easy scaling
-- ✅ **No nodemailer dependency needed**
+- ✅ **No additional dependencies needed**
 
 ---
 
@@ -17,63 +17,54 @@
 
 ### 1. **Dependencies Updated**
 ```json
-// REMOVED
-"nodemailer": "^7.0.11"
-
-// No new dependencies required
+// No changes required - using fetch API directly
 ```
 
 ### 2. **Environment Variables Changed**
 ```dotenv
-# OLD SMTP CONFIG (REMOVED)
-EMAIL_HOST=smtp.resend.com
-EMAIL_PORT=587
-EMAIL_USER=resend
-EMAIL_PASS=your_resend_api_key_here
-
-# OLD BREVO CONFIG (REMOVED)
-BREVO_API_KEY=your_brevo_api_key_here
-
-# NEW RESEND CONFIG
+# OLD RESEND CONFIG (REMOVED)
 RESEND_API_KEY=your_resend_api_key_here
-EMAIL_FROM="ArtistApp <noreply@yourdomain.com>"
+
+# NEW BREVO CONFIG
+BREVO_API_KEY=your_brevo_api_key_here
+EMAIL_FROM="noreply@artistapp.com"
 ```
 
 ### 3. **Code Changes**
-- `emailService.js`: Complete rewrite using Resend REST API with fetch (no SDK dependency issues)
-- `test-email.js`: Updated to test Resend API
+- `emailService.js`: Updated to use Brevo REST API with fetch
+- `test-email.js`: Updated to test Brevo API
 - All email functions (`sendOTPEmail`, `sendWelcomeEmail`) preserved
 
 ---
 
 ## 🚀 Setup Instructions
 
-### Step 1: Create Resend Account
-1. Go to [resend.com](https://www.resend.com)
+### Step 1: Create Brevo Account
+1. Go to [brevo.com](https://www.brevo.com)
 2. Click **"Sign Up"**
 3. Verify your email address
 4. Complete account setup
 
 ### Step 2: Get API Key
-1. In Resend dashboard, go to **"API keys"**
-2. Click **"Create API key"**
-3. Name it: `ArtistApp Production`
-4. Copy the API key (save it securely!)
+1. In Brevo dashboard, go to **"SMTP & API"**
+2. Click **"API Keys"**
+3. Click **"Create a new API key"**
+4. Name it: `ArtistApp Production`
+5. Copy the API key (save it securely!)
 
 ### Step 3: Verify Sender Email
-1. In Resend dashboard, go to **"Senders"**
+1. In Brevo dashboard, go to **"Senders"**
 2. Add your email or domain
 3. Verify ownership (email confirmation or DNS records)
-4. **Alternative:** Use default verified sender from Resend
 
 ### Step 4: Update Environment Variables
 In `backend/.env`:
 ```dotenv
 # Replace this line:
-RESEND_API_KEY=your_resend_api_key_here
+BREVO_API_KEY=your_brevo_api_key_here
 
 # With your actual API key:
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+BREVO_API_KEY=xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### Step 5: Test Email Service
@@ -84,11 +75,11 @@ node test-email.js
 
 **Expected Output:**
 ```
-🔧 Testing Resend email configuration...
+🔧 Testing Brevo email configuration...
 
 📧 Email Config:
-RESEND_API_KEY: ***SET***
-EMAIL_FROM: ArtistApp <noreply@yourdomain.com>
+BREVO_API_KEY: ***SET***
+EMAIL_FROM: noreply@artistapp.com
 
 📨 Sending test email...
 ✅ Email sent successfully!

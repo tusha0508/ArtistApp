@@ -1,22 +1,22 @@
 // services/emailService.js
 
-// Test connection on startup
-const testConnection = async () => {
-  try {
-    if (!process.env.BREVO_API_KEY) {
-      console.error("❌ Brevo API key not found. Please set BREVO_API_KEY in your environment variables.");
-      return;
-    }
-    console.log("✅ Brevo email service is ready to send messages");
-  } catch (error) {
-    console.error("❌ Brevo service initialization failed:", error.message);
+// Test connection only when needed
+const testConnection = () => {
+  if (!process.env.BREVO_API_KEY) {
+    console.error("❌ Brevo API key not found. Please set BREVO_API_KEY in your environment variables.");
+    return false;
   }
+  console.log("✅ Brevo email service is ready to send messages");
+  return true;
 };
-
-testConnection();
 
 export const sendEmail = async ({ to, subject, html }) => {
   try {
+    // Ensure API key is available
+    if (!testConnection()) {
+      throw new Error("Email service not configured");
+    }
+
     console.log("[DEBUG] BREVO_API_KEY present:", Boolean(process.env.BREVO_API_KEY));
     console.log("[DEBUG] BREVO_API_KEY value (first 10 chars):", process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.slice(0, 10) : "undefined");
 
