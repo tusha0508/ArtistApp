@@ -3,13 +3,13 @@
 // Test connection on startup
 const testConnection = async () => {
   try {
-    if (!process.env.RESEND_API_KEY) {
-      console.error("❌ Resend API key not found. Please set RESEND_API_KEY in your environment variables.");
+    if (!process.env.BREVO_API_KEY) {
+      console.error("❌ Brevo API key not found. Please set BREVO_API_KEY in your environment variables.");
       return;
     }
-    console.log("✅ Resend email service is ready to send messages");
+    console.log("✅ Brevo email service is ready to send messages");
   } catch (error) {
-    console.error("❌ Resend service initialization failed:", error.message);
+    console.error("❌ Brevo service initialization failed:", error.message);
   }
 };
 
@@ -17,32 +17,36 @@ testConnection();
 
 export const sendEmail = async ({ to, subject, html }) => {
   try {
-    console.log("[DEBUG] RESEND_API_KEY present:", Boolean(process.env.RESEND_API_KEY));
-    console.log("[DEBUG] RESEND_API_KEY value (first 10 chars):", process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.slice(0, 10) : "undefined");
+    console.log("[DEBUG] BREVO_API_KEY present:", Boolean(process.env.BREVO_API_KEY));
+    console.log("[DEBUG] BREVO_API_KEY value (first 10 chars):", process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.slice(0, 10) : "undefined");
 
     const emailData = {
-      from: process.env.EMAIL_FROM || "ArtistApp <noreply@yourdomain.com>",
-      to: [to],
-      subject,
-      html,
+      sender: {
+        email: process.env.EMAIL_FROM || "noreply@artistapp.com",
+        name: "ArtistApp"
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html,
     };
 
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'accept': 'application/json',
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
       },
       body: JSON.stringify(emailData),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Resend API error: ${response.status} - ${errorData.error || errorData.message || 'Unknown error'}`);
+      const errorData = await response.json();
+      throw new Error(`Brevo API error: ${response.status} - ${errorData.message || 'Unknown error'}`);
     }
 
     const result = await response.json();
-    console.log(`✅ Email sent successfully to ${to} (Message ID: ${result.id})`);
+    console.log(`✅ Email sent successfully to ${to} (Message ID: ${result.messageId})`);
     return result;
   } catch (error) {
     console.error(`❌ Failed to send email to ${to}:`, error.message);
