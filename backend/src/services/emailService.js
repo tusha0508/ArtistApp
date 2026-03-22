@@ -1,44 +1,51 @@
 // services/emailService.js
-import nodemailer from "nodemailer";
-
-import nodemailer from "nodemailer";
-
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false, // true for 465, false for 587
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  connectionTimeout: 60000, // 60 seconds
-  socketTimeout: 60000, // 60 seconds
-  tls: {
-    rejectUnauthorized: false // Allow self-signed certificates
-  }
-});
 
 // Test connection on startup
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Email service connection failed:", error.message);
-    console.log("📧 Email credentials - USER:", process.env.EMAIL_USER);
-    console.log("🔑 Email credentials - HOST:", process.env.EMAIL_HOST + ":" + process.env.EMAIL_PORT);
-    console.log("💡 If using Gmail, make sure 2FA is enabled and you're using an App Password");
-  } else {
-    console.log("✅ Email service is ready to send messages");
+const testConnection = async () => {
+  try {
+    // Check if API key is set
+    if (!process.env.BREVO_API_KEY) {
+      console.error("❌ Brevo API key not found. Please set BREVO_API_KEY in your environment variables.");
+      return;
+    }
+    console.log("✅ Brevo email service is ready to send messages");
+  } catch (error) {
+    console.error("❌ Brevo service initialization failed:", error.message);
   }
-});
+};
+
+testConnection();
 
 export const sendEmail = async ({ to, subject, html }) => {
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
-      to,
-      subject,
-      html,
+    const emailData = {
+      sender: {
+        email: process.env.EMAIL_FROM || "noreply@artistapp.com",
+        name: "ArtistApp"
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html,
+    };
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
     });
-    console.log(`✅ Email sent successfully to ${to}`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Brevo API error: ${response.status} - ${errorData.message || 'Unknown error'}`);
+    }
+
+    const result = await response.json();
+    console.log(`✅ Email sent successfully to ${to} (Message ID: ${result.messageId})`);
+    return result;
   } catch (error) {
     console.error(`❌ Failed to send email to ${to}:`, error.message);
     throw error; // Re-throw so caller knows it failed
@@ -47,7 +54,7 @@ export const sendEmail = async ({ to, subject, html }) => {
 
 export const sendOTPEmail = async ({ to, otp, userName, isSignup = false }) => {
   const subject = isSignup ? "Verify Your Email - ArtistApp" : "Password Reset Code - ArtistApp";
-  
+
   const html = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #5B4FEE 0%, #FF7F50 100%); padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -56,8 +63,8 @@ export const sendOTPEmail = async ({ to, otp, userName, isSignup = false }) => {
       <div style="background-color: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; color: #333;">
         <p style="font-size: 16px; color: #333; margin-bottom: 10px;">Hello ${userName},</p>
         <p style="font-size: 15px; color: #555; line-height: 24px; margin-bottom: 25px;">
-          ${isSignup 
-            ? "Welcome to ArtistApp! Please verify your email address to complete your account setup." 
+          ${isSignup
+            ? "Welcome to ArtistApp! Please verify your email address to complete your account setup."
             : "You have requested to reset your password. Use the code below to proceed:"}
         </p>
         <div style="background-color: white; padding: 25px; text-align: center; border-radius: 8px; margin: 25px 0; border: 2px solid #5B4FEE;">
@@ -66,8 +73,8 @@ export const sendOTPEmail = async ({ to, otp, userName, isSignup = false }) => {
         </div>
         <p style="color: #666; font-size: 14px; text-align: center; margin: 20px 0;">This code is valid for <strong>10 minutes</strong>.</p>
         <p style="color: #666; font-size: 14px; text-align: center; margin: 10px 0;">${
-          isSignup 
-            ? "If you did not create an ArtistApp account, please disregard this email." 
+          isSignup
+            ? "If you did not create an ArtistApp account, please disregard this email."
             : "If you did not request this, please disregard this email."
         }</p>
         <hr style="border: none; border-top: 1px solid #ddd; margin: 25px 0;">
@@ -75,14 +82,14 @@ export const sendOTPEmail = async ({ to, otp, userName, isSignup = false }) => {
       </div>
     </div>
   `;
-  
+
   await sendEmail({ to, subject, html });
 };
 
 export const sendWelcomeEmail = async ({ to, username, role }) => {
   const isArtist = role === "artist";
   const subject = "Welcome to ArtistApp";
-  
+
   const html = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
       <!-- Header -->
@@ -93,7 +100,7 @@ export const sendWelcomeEmail = async ({ to, username, role }) => {
       <!-- Content -->
       <div style="padding: 40px 20px; background-color: #f9f9f9;">
         <p style="font-size: 16px; color: #333; margin-bottom: 10px;">Hello <strong>${username}</strong>,</p>
-        
+
         <p style="font-size: 15px; color: #555; line-height: 24px; margin-bottom: 30px;">
           Your account has been created successfully! You are now part of our creative community.
         </p>
@@ -101,7 +108,7 @@ export const sendWelcomeEmail = async ({ to, username, role }) => {
         ${isArtist ? `
           <!-- Artist Content -->
           <h2 style="color: #5B4FEE; font-size: 20px; margin-top: 30px; margin-bottom: 20px;">Get Started</h2>
-          
+
           <div style="background-color: white; border-left: 4px solid #5B4FEE; padding: 16px; margin-bottom: 16px; border-radius: 4px;">
             <p style="margin: 0; font-size: 15px; color: #333;"><strong>Upload Your Portfolio</strong></p>
             <p style="margin: 8px 0 0 0; font-size: 14px; color: #666;">Add images and videos of your work to showcase your talent</p>
@@ -124,7 +131,7 @@ export const sendWelcomeEmail = async ({ to, username, role }) => {
         ` : `
           <!-- User Content -->
           <h2 style="color: #5B4FEE; font-size: 20px; margin-top: 30px; margin-bottom: 20px;">Get Started</h2>
-          
+
           <div style="background-color: white; border-left: 4px solid #5B4FEE; padding: 16px; margin-bottom: 16px; border-radius: 4px;">
             <p style="margin: 0; font-size: 15px; color: #333;"><strong>Discover Artists</strong></p>
             <p style="margin: 8px 0 0 0; font-size: 14px; color: #666;">Browse talented artists based on your requirements and budget</p>
@@ -162,6 +169,6 @@ export const sendWelcomeEmail = async ({ to, username, role }) => {
       </div>
     </div>
   `;
-  
+
   await sendEmail({ to, subject, html });
 };

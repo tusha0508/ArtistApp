@@ -1,102 +1,165 @@
-# Email Service Issues - Root Cause Analysis & Fixes
+# Email Service Migration: SMTP → Brevo (Sendinblue)
 
-## 🔴 Problems Found
+## 🔄 Migration Summary
 
-### 1. **CRITICAL: Invalid EMAIL_FROM Format**
-**Location:** `backend/.env`
-- **Problem:** `EMAIL_FROM="Artist App Says"`
-- **Why it fails:** Gmail SMTP expects the `from` field to be a valid email address in the format: `"Display Name <email@gmail.com>"`
-- **Error on Render:** Connection gets rejected by Gmail SMTP server, causing "connection lost" errors
-- **Result:** ❌ ALL emails fail to send (signup, bookings, confirmations, etc.)
+**Previous:** Nodemailer + SMTP (Gmail/Resend)  
+**New:** Brevo API (more reliable, better deliverability)
 
-### 2. **Missing Error Handling in sendEmail()**
-**Location:** `backend/src/services/emailService.js`
-- **Problem:** No try-catch in `sendEmail()` function
-- **Result:** SMTP errors silently fail without logging
-
-### 3. **Missing Timeout Configuration**
-**Location:** `backend/src/services/emailService.js`
-- **Problem:** Nodemailer transport lacks timeout settings
-- **On Render:** Network issues can hang indefinitely
-- **Result:** Requests timeout without proper error messages
+### Why Brevo?
+- ✅ **Higher deliverability** (less likely to go to spam)
+- ✅ **Better analytics** (open rates, click tracking)
+- ✅ **API-based** (no SMTP port/firewall issues)
+- ✅ **Free tier** (300 emails/day)
+- ✅ **Professional templates** available
 
 ---
 
-## ✅ Fixes Applied
+## 📋 Migration Changes
 
-### Fix 1: Update .env EMAIL_FROM Format
+### 1. **Dependencies Updated**
+```json
+// REMOVED
+"nodemailer": "^7.0.11"
+
+// ADDED
+"@getbrevo/brevo": "^1.x.x"
+```
+
+### 2. **Environment Variables Changed**
 ```dotenv
-# BEFORE (❌ WRONG)
-EMAIL_FROM="Artist App Says"
+# OLD SMTP CONFIG (REMOVED)
+EMAIL_HOST=smtp.resend.com
+EMAIL_PORT=587
+EMAIL_USER=resend
+EMAIL_PASS=your_resend_api_key_here
 
-# AFTER (✅ CORRECT)
-EMAIL_FROM="ArtistApp <tushajoshi9@gmail.com>"
+# NEW BREVO CONFIG
+BREVO_API_KEY=your_brevo_api_key_here
+EMAIL_FROM="ArtistApp <noreply@yourdomain.com>"
 ```
 
-### Fix 2: Enhanced Email Service with Error Handling
-```javascript
-// Added to transporter config:
-connectionTimeout: 10000,  // 10 seconds
-socketTimeout: 10000,      // 10 seconds
-
-// Added try-catch to sendEmail():
-export const sendEmail = async ({ to, subject, html }) => {
-  try {
-    await transporter.sendMail({...});
-    console.log(`✅ Email sent successfully to ${to}`);
-  } catch (error) {
-    console.error(`❌ Failed to send email to ${to}:`, error.message);
-    throw error; // Re-throw so caller knows it failed
-  }
-};
-```
+### 3. **Code Changes**
+- `emailService.js`: Complete rewrite using Brevo REST API with fetch (no SDK dependency issues)
+- `test-email.js`: Updated to test Brevo API
+- All email functions (`sendOTPEmail`, `sendWelcomeEmail`) preserved
 
 ---
 
-## 📋 Email Types Affected (All Fixed)
+## 🚀 Setup Instructions
 
-✅ **Account Creation Emails** - User & Artist signup  
-✅ **Booking Sent Emails** - Artist receives new booking request  
-✅ **Booking Accepted Emails** - User receives acceptance  
-✅ **Booking Rejected Emails** - User receives rejection  
-✅ **Counter Offer Emails** - User receives new price offer  
-✅ **Password Reset OTP Emails** - Both user & artist
+### Step 1: Create Brevo Account
+1. Go to [brevo.com](https://www.brevo.com) (formerly Sendinblue)
+2. Click **"Sign Up Free"**
+3. Verify your email address
+4. Complete account setup
 
----
+### Step 2: Get API Key
+1. In Brevo dashboard, go to **"SMTP & API"** → **"API Keys"**
+2. Click **"Create a new API Key"**
+3. Name it: `ArtistApp Production`
+4. Copy the API key (save it securely!)
 
-## 🚀 What to Do Now
+### Step 3: Verify Sender Email
+1. Go to **"Senders & IP"** → **"Domains"**
+2. Add your domain (or use Brevo's shared domain)
+3. Verify ownership via DNS records
+4. **Alternative:** Use Brevo's default sender: `noreply@brevo.com`
 
-### Step 1: Restart Backend on Render
-1. Go to [render.com](https://render.com)
-2. Select your backend service
-3. Click **"Manual Deploy"** → **"Latest commit"**
-
-### Step 2: Test Email Functionality
-1. **Create a new account** → Check email for welcome email
-2. **Send a booking** → Artist should receive booking request
-3. **Accept/Reject booking** → User should receive response
-
-### Step 3: Verify in Render Logs
-Check your Render service logs for:
-```
-✅ Email sent successfully to user@email.com
-```
-
-If you see errors, check:
-- Gmail App Password is correct (not regular password)
-- Email address is correct
-- All env variables are properly set
-
----
-
-## 🔧 Additional Recommendations for Render
-
-### Enable "Render" Error Logs
-1. In `backend/.env`, add:
+### Step 4: Update Environment Variables
+In `backend/.env`:
 ```dotenv
-NODE_ENV=production
-SERVER_URL=https://your-render-app.onrender.com
+# Replace this line:
+BREVO_API_KEY=your_brevo_api_key_here
+
+# With your actual API key:
+BREVO_API_KEY=xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+### Step 5: Test Email Service
+```bash
+cd backend
+node test-email.js
+```
+
+**Expected Output:**
+```
+🔧 Testing Brevo email configuration...
+
+📧 Email Config:
+BREVO_API_KEY: ***SET***
+EMAIL_FROM: ArtistApp <noreply@yourdomain.com>
+
+🔗 Testing Brevo API connection...
+📨 Sending test email...
+✅ Email sent successfully!
+Message ID: xxxxxxxxxx
+```
+
+### Step 6: Deploy to Production
+1. Commit changes to Git
+2. Deploy on Render (manual deploy recommended)
+3. Check logs for successful email initialization
+
+---
+
+## 📧 Email Types (All Working)
+
+✅ **OTP Emails** - Signup & password reset verification  
+✅ **Welcome Emails** - New user/artist onboarding  
+✅ **Booking Request Emails** - Artist receives booking notifications  
+✅ **Booking Response Emails** - User receives accept/reject/price changes  
+
+---
+
+## 🔧 Troubleshooting
+
+### "BREVO_API_KEY not found"
+- Check `.env` file exists and is properly formatted
+- Ensure no extra spaces around `=`
+- Restart backend service
+
+### "Invalid API key"
+- Double-check API key from Brevo dashboard
+- Ensure you're using the v3 API key (starts with `xkeysib-`)
+
+### "Sender not verified"
+- Complete domain verification in Brevo
+- Or use: `EMAIL_FROM="ArtistApp <noreply@brevo.com>"`
+
+### Emails going to spam?
+- Complete domain verification
+- Send test emails to warm up IP reputation
+- Avoid spam trigger words in subject/content
+
+### Connection/Network errors
+- Check internet connectivity
+- Verify Brevo API endpoint is accessible
+- Check firewall settings (port 443 for HTTPS)
+
+### Still having issues?
+1. Check Render logs for detailed error messages
+2. Test with Brevo's API testing tool
+3. Contact Brevo support (they're very responsive)
+
+---
+
+## 💰 Brevo Pricing (Free Tier Sufficient)
+
+- **Free:** 300 emails/day
+- **Paid:** $25/month for 20,000 emails
+- **Enterprise:** Custom pricing
+
+For ArtistApp's current usage, the free tier should be more than enough!
+
+---
+
+## 🎯 Next Steps
+
+1. ✅ Complete Brevo setup
+2. ✅ Test email functionality
+3. ✅ Deploy to production
+4. ✅ Monitor email delivery rates
+5. 🔄 Consider upgrading to paid plan if needed
 
 ### Gmail App Password Setup (If Issues Persist)
 1. Go to [myaccount.google.com/security](https://myaccount.google.com/security)
