@@ -13,6 +13,10 @@ import { sendEmail } from "../services/emailService.js";
 
 /**
  * UTILITY: Calculate refund percentage based on days before event
+ * >= 15 days → 90% refund
+ * 10–14 days → 40% refund
+ * 5–9 days → 30% refund
+ * <= 3 days → 0 refund
  */
 const calculateRefundPercentage = (eventDate) => {
   const now = new Date();
@@ -410,9 +414,10 @@ export const verifyRemainingPayment = async (req, res) => {
 /**
  * USER → REQUEST REFUND
  * Refund rules:
- * - >3 days before event: 100% refund
- * - 1-3 days before: 50% refund
- * - <1 day before: 0% refund (no refund)
+ * - >= 15 days before event: 90% refund
+ * - 10-14 days before: 40% refund
+ * - 5-9 days before: 30% refund
+ * - <= 3 days before: 0% refund (no refund)
  */
 export const requestRefund = async (req, res) => {
   try {
@@ -443,17 +448,15 @@ export const requestRefund = async (req, res) => {
     const eventDate = new Date(booking.eventDate);
     const daysBeforeEvent = Math.ceil((eventDate - now) / (1000 * 60 * 60 * 24));
 
-    let refundPercentage = 0;
-
-    if (daysBeforeEvent > 3) {
-      refundPercentage = 100; // Full refund
-    } else if (daysBeforeEvent >= 1) {
-      refundPercentage = 50; // Half refund
-    } else {
-      refundPercentage = 0; // No refund
-    }
-
+    const refundPercentage = calculateRefundPercentage(booking.eventDate);
     const refundAmount = (payment.advanceAmount * refundPercentage) / 100;
+
+    console.log(`💰 [REFUND] Booking ${bookingId}:`, {
+      daysBeforeEvent,
+      refundPercentage,
+      advisanceAmount: payment.advanceAmount,
+      refundAmount: Math.round(refundAmount),
+    });
 
     // Update payment with refund request
     payment.refund = {
@@ -461,7 +464,7 @@ export const requestRefund = async (req, res) => {
       refundReason: reason,
       daysBeforeEvent,
       refundPercentage,
-      refundAmount,
+      refundAmount: Math.round(refundAmount),
       refundStatus: refundAmount > 0 ? "PROCESSING" : "NOT_INITIATED",
     };
 
@@ -476,8 +479,10 @@ export const requestRefund = async (req, res) => {
         payment.refund.razorpayRefundId = refundResult.refundId;
         payment.refund.refundStatus = "PROCESSING";
         payment.refund.refundInitiatedAt = new Date();
+
+        console.log(`✅ [REFUND] Razorpay refund initiated:`, refundResult.refundId);
       } catch (refundErr) {
-        console.error("Refund processing error:", refundErr);
+        console.error("❌ [REFUND] Refund processing error:", refundErr);
         payment.refund.refundStatus = "FAILED";
       }
     }
@@ -490,11 +495,16 @@ export const requestRefund = async (req, res) => {
     });
 
     return res.status(200).json({
-      message: `Refund request processed. ${refundPercentage}% refund (₹${refundAmount}) will be credited.`,
-      refund: payment.refund,
+      message: `Refund request processed. ${refundPercentage}% refund (₹${Math.round(refundAmount)}) will be credited.`,
+      refund: {
+        percentage: refundPercentage,
+        amount: Math.round(refundAmount),
+        daysBeforeEvent,
+        status: payment.refund.refundStatus,
+      },
     });
   } catch (err) {
-    console.error("requestRefund error:", err);
+    console.error("❌ [REFUND] requestRefund error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -522,11 +532,13 @@ export const getPaymentDetails = async (req, res) => {
 };
 
 /**
- * ARTIST → CANCEL BOOKING (100% refund)
+ * ARTIST → CANCEL BOOKING (100% refund to user)
  */
 export const cancelBookingByArtist = async (req, res) => {
   try {
     const { bookingId, reason } = req.body;
+
+    console.log(`🔴 [ARTIST CANCEL] Initiated for booking ${bookingId}`);
 
     const booking = await Booking.findById(bookingId);
 
@@ -561,15 +573,17 @@ export const cancelBookingByArtist = async (req, res) => {
             (new Date(booking.eventDate) - new Date()) / (1000 * 60 * 60 * 24)
           ),
           refundPercentage: 100,
-          refundAmount: payment.advanceAmount,
+          refundAmount: Math.round(payment.advanceAmount),
           razorpayPaymentId: payment.advancePaymentOrder.razorpayPaymentId,
           razorpayRefundId: refundResult.refundId,
           refundStatus: "PROCESSING",
           refundInitiatedAt: new Date(),
         };
         await payment.save();
+
+        console.log(`✅ [ARTIST CANCEL] 100% refund initiated:`, refundResult.refundId);
       } catch (refundErr) {
-        console.error("Artist cancellation refund error:", refundErr);
+        console.error("❌ [ARTIST CANCEL] Refund error:", refundErr);
         return res.status(500).json({
           message: "Failed to process refund",
           error: refundErr.message,
@@ -611,12 +625,16 @@ export const cancelBookingByArtist = async (req, res) => {
       };
       await artist.save();
 
+      console.warn(`⚠️ [ARTIST CANCEL] Artist ${req.user._id} shadow banned for 30 days`);
+
       return res.status(200).json({
         message: "Booking cancelled. 100% refund processed. You have been shadow banned for 30 days.",
         booking,
         refund: payment?.refund,
       });
     }
+
+    console.log(`✅ [ARTIST CANCEL] Complete. Booking ${bookingId} cancelled`);
 
     return res.status(200).json({
       message: "Booking cancelled. 100% refund processed.",
@@ -625,17 +643,23 @@ export const cancelBookingByArtist = async (req, res) => {
       cancellationsLeft: 3 - cancellationCount,
     });
   } catch (err) {
-    console.error("cancelBookingByArtist error:", err);
+    console.error("❌ [ARTIST CANCEL] Error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 /**
  * USER → CANCEL BOOKING (with refund policy)
+ * >= 15 days before event: 90% refund
+ * 10-14 days before: 40% refund
+ * 5-9 days before: 30% refund
+ * <= 3 days before: 0% refund
  */
 export const cancelBookingByUser = async (req, res) => {
   try {
     const { bookingId, reason } = req.body;
+
+    console.log(`🔴 [USER CANCEL] Initiated for booking ${bookingId}`);
 
     const booking = await Booking.findById(bookingId);
 
@@ -663,17 +687,27 @@ export const cancelBookingByUser = async (req, res) => {
 
     // Calculate refund based on days before event
     const refundPercentage = calculateRefundPercentage(booking.eventDate);
-    const refundAmount = (payment.advanceAmount * refundPercentage) / 100;
+    const refundAmount = Math.round((payment.advanceAmount * refundPercentage) / 100);
     const daysBeforeEvent = Math.ceil(
       (new Date(booking.eventDate) - new Date()) / (1000 * 60 * 60 * 24)
     );
 
+    console.log(`💰 [USER CANCEL] Refund calc:`, {
+      daysBeforeEvent,
+      refundPercentage,
+      advanceAmount: payment.advanceAmount,
+      refundAmount,
+    });
+
     // Process refund
+    let refundId = null;
     try {
       const refundResult = await createRefund(
         payment.advancePaymentOrder.razorpayPaymentId,
         refundAmount
       );
+
+      refundId = refundResult.refundId;
 
       payment.refund = {
         isRefundRequested: true,
@@ -687,8 +721,10 @@ export const cancelBookingByUser = async (req, res) => {
         refundInitiatedAt: new Date(),
       };
       await payment.save();
+
+      console.log(`✅ [USER CANCEL] Refund initiated:`, refundId);
     } catch (refundErr) {
-      console.error("User cancellation refund error:", refundErr);
+      console.error("❌ [USER CANCEL] Refund error:", refundErr);
       payment.refund = {
         isRefundRequested: true,
         refundReason: reason,
@@ -699,6 +735,11 @@ export const cancelBookingByUser = async (req, res) => {
         refundError: refundErr.message,
       };
       await payment.save();
+
+      return res.status(500).json({
+        message: "Refund processing failed",
+        error: refundErr.message,
+      });
     }
 
     // Record cancellation
@@ -717,17 +758,20 @@ export const cancelBookingByUser = async (req, res) => {
     booking.userCancelReason = reason;
     await booking.save();
 
+    console.log(`✅ [USER CANCEL] Complete. Booking ${bookingId} cancelled`);
+
     return res.status(200).json({
-      message: `Booking cancelled. ${refundPercentage}% refund (₹${Math.round(refundAmount)}) will be credited to your account.`,
+      message: `Booking cancelled. ${refundPercentage}% refund (₹${refundAmount}) initiated.`,
       booking,
       refund: {
         percentage: refundPercentage,
-        amount: Math.round(refundAmount),
+        amount: refundAmount,
         daysBeforeEvent,
+        refundId,
       },
     });
   } catch (err) {
-    console.error("cancelBookingByUser error:", err);
+    console.error("❌ [USER CANCEL] Error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

@@ -83,5 +83,10 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Index for quick lookups
+paymentSchema.index({ bookingId: 1 });
+paymentSchema.index({ userId: 1 });
+paymentSchema.index({ artistId: 1 });
+
 const Payment = mongoose.model("Payment", paymentSchema);
 export default Payment;
