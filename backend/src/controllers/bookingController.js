@@ -294,9 +294,9 @@ export const respondToBooking = async (req, res) => {
     // EMAIL → USER
     let emailText = "";
 
-    if (status === "ACCEPTED") {
+    if (status === "accepted") {
       emailText = "Your booking has been accepted 🎉";
-    } else if (status === "REJECTED") {
+    } else if (status === "rejected") {
       emailText = "Your booking was rejected.";
     } else {
       emailText = `Artist requested a change. New amount: ₹${counterOfferAmount}`;

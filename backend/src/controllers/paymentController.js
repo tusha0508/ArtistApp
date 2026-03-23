@@ -55,20 +55,16 @@ export const createAdvancePaymentOrder = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // Only allow for confirmed bookings
-    if (booking.status !== "CONFIRMED" && booking.status !== "ACCEPTED") {
+    // Only allow for accepted bookings
+    if (booking.status !== "accepted") {
       console.error('❌ [ADVANCE PAYMENT] Booking not ready. Status:', booking.status);
       return res
         .status(400)
         .json({ message: "Booking is not ready for payment" });
     }
 
-    // Determine final amount
-    const finalAmount =
-      booking.status === "CONFIRMED"
-        ? booking.counterOfferAmount
-        : booking.proposedBudget;
-
+    // Determine final amount (use finalAmount field which is set when booking is accepted)
+    const finalAmount = booking.finalAmount;
     const advanceAmount = Math.round(finalAmount * 0.15); // 15%
     const remainingAmount = finalAmount - advanceAmount;
 

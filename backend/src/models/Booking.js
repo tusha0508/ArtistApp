@@ -33,7 +33,9 @@ const bookingSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        "pending",        // awaiting advance payment
+        "pending",        // awaiting artist response
+        "accepted",       // artist accepted, awaiting advance payment
+        "rejected",       // artist rejected the booking
         "partial_paid",   // advance paid, remaining 85% pending
         "paid",           // both advance + remaining paid
         "cancelled"       // booking cancelled with refund
