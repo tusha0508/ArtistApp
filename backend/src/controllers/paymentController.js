@@ -486,7 +486,7 @@ export const requestRefund = async (req, res) => {
 
     // Update booking status
     await Booking.findByIdAndUpdate(bookingId, {
-      status: "CANCELLED",
+      status: "cancelled",
     });
 
     return res.status(200).json({
@@ -540,7 +540,7 @@ export const cancelBookingByArtist = async (req, res) => {
     }
 
     // Only allow cancellation if not already cancelled
-    if (booking.status === "CANCELLED") {
+    if (booking.status === "cancelled") {
       return res.status(400).json({ message: "Booking is already cancelled" });
     }
 
@@ -588,7 +588,7 @@ export const cancelBookingByArtist = async (req, res) => {
     });
 
     // Update booking
-    booking.status = "CANCELLED";
+    booking.status = "cancelled";
     booking.artistCancelledAt = new Date();
     booking.artistCancelReason = reason;
     await booking.save();
@@ -649,7 +649,7 @@ export const cancelBookingByUser = async (req, res) => {
     }
 
     // Only allow cancellation if not already cancelled
-    if (booking.status === "CANCELLED") {
+    if (booking.status === "cancelled") {
       return res.status(400).json({ message: "Booking is already cancelled" });
     }
 
@@ -712,7 +712,7 @@ export const cancelBookingByUser = async (req, res) => {
     });
 
     // Update booking
-    booking.status = "CANCELLED";
+    booking.status = "cancelled";
     booking.userCancelledAt = new Date();
     booking.userCancelReason = reason;
     await booking.save();
