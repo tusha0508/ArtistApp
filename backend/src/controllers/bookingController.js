@@ -289,7 +289,37 @@ export const respondToBooking = async (req, res) => {
     booking.status = status;
     booking.artistMessage = artistMessage;
     booking.counterOfferAmount = counterOfferAmount;
+    
+    // Set finalAmount when booking is accepted
+    if (status === "accepted") {
+      booking.finalAmount = booking.counterOfferAmount || booking.proposedBudget;
+    }
+    
     await booking.save();
+
+    // Create payment record when booking is accepted
+    if (status === "accepted") {
+      const Payment = (await import("../models/Payment.js")).default;
+      
+      // Check if payment record already exists
+      const existingPayment = await Payment.findOne({ bookingId: booking._id });
+      
+      if (!existingPayment) {
+        // Create payment record
+        await Payment.create({
+          bookingId: booking._id,
+          userId: booking.userId._id,
+          artistId: booking.artistId._id,
+          totalAmount: booking.finalAmount,
+          advanceAmount: Math.round(booking.finalAmount * 0.15),
+          remainingAmount: booking.finalAmount - Math.round(booking.finalAmount * 0.15),
+          advancePaymentStatus: "PENDING",
+          remainingPaymentStatus: "PENDING",
+        });
+        
+        console.log('💰 [BOOKING ACCEPTED] Payment record created for booking:', booking._id);
+      }
+    }
 
     // EMAIL → USER
     let emailText = "";
