@@ -7,7 +7,8 @@ import {
   verifyRemainingPayment,
   requestRefund,
   getPaymentDetails,
-  cancelBooking,
+  cancelBookingByArtist,
+  cancelBookingByUser,
 } from "../controllers/paymentController.js";
 
 const router = express.Router();
@@ -54,7 +55,8 @@ router.post("/refund/request", protectRoute(["user"]), requestRefund);
 // Get Payment Details
 router.get("/details/:bookingId", getPaymentDetails);
 
-// Cancel Booking (with shadow ban tracking)
-router.post("/booking/cancel", protectRoute(["artist"]), cancelBooking);
+// Cancellation
+router.post("/booking/cancel-artist", protectRoute(["artist"]), cancelBookingByArtist);
+router.post("/booking/cancel-user", protectRoute(["user"]), cancelBookingByUser);
 
 export default router;

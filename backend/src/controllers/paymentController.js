@@ -12,6 +12,20 @@ import {
 import { sendEmail } from "../services/emailService.js";
 
 /**
+ * UTILITY: Calculate refund percentage based on days before event
+ */
+const calculateRefundPercentage = (eventDate) => {
+  const now = new Date();
+  const eventTime = new Date(eventDate);
+  const daysBeforeEvent = Math.ceil((eventTime - now) / (1000 * 60 * 60 * 24));
+
+  if (daysBeforeEvent >= 15) return 90;
+  if (daysBeforeEvent >= 10) return 40;
+  if (daysBeforeEvent >= 5) return 30;
+  return 0; // No refund if <= 3 days
+};
+
+/**
  * USER → CREATE RAZORPAY ORDER FOR ADVANCE PAYMENT (15%)
  */
 export const createAdvancePaymentOrder = async (req, res) => {
@@ -175,7 +189,7 @@ export const verifyAdvancePayment = async (req, res) => {
     const booking = await Booking.findByIdAndUpdate(
       bookingId,
       {
-        status: "ACTIVE",
+        status: "partial_paid",
         finalAmount: payment.totalAmount,
         paymentStatus: {
           advancePaid: true,
@@ -512,9 +526,9 @@ export const getPaymentDetails = async (req, res) => {
 };
 
 /**
- * ARTIST → CANCEL BOOKING (with shadow ban tracking)
+ * ARTIST → CANCEL BOOKING (100% refund)
  */
-export const cancelBooking = async (req, res) => {
+export const cancelBookingByArtist = async (req, res) => {
   try {
     const { bookingId, reason } = req.body;
 
@@ -534,19 +548,47 @@ export const cancelBooking = async (req, res) => {
       return res.status(400).json({ message: "Booking is already cancelled" });
     }
 
+    const payment = await Payment.findOne({ bookingId });
+
+    // Process 100% refund if advance payment is completed
+    if (payment && payment.advancePaymentStatus === "COMPLETED") {
+      try {
+        const refundResult = await createRefund(
+          payment.advancePaymentOrder.razorpayPaymentId,
+          payment.advanceAmount
+        );
+
+        payment.refund = {
+          isRefundRequested: true,
+          refundReason: reason,
+          daysBeforeEvent: Math.ceil(
+            (new Date(booking.eventDate) - new Date()) / (1000 * 60 * 60 * 24)
+          ),
+          refundPercentage: 100,
+          refundAmount: payment.advanceAmount,
+          razorpayPaymentId: payment.advancePaymentOrder.razorpayPaymentId,
+          razorpayRefundId: refundResult.refundId,
+          refundStatus: "PROCESSING",
+          refundInitiatedAt: new Date(),
+        };
+        await payment.save();
+      } catch (refundErr) {
+        console.error("Artist cancellation refund error:", refundErr);
+        return res.status(500).json({
+          message: "Failed to process refund",
+          error: refundErr.message,
+        });
+      }
+    }
+
     // Record cancellation
-    await Cancellation.create({
+    const cancellation = await Cancellation.create({
       artistId: req.user._id,
       bookingId,
       userId: booking.userId,
+      cancelledBy: "artist",
       reason,
-    });
-
-    // Check if artist has 3 cancellations in last 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const cancellationCount = await Cancellation.countDocuments({
-      artistId: req.user._id,
-      createdAt: { $gte: sevenDaysAgo },
+      refund: payment?.refund || {},
     });
 
     // Update booking
@@ -555,11 +597,17 @@ export const cancelBooking = async (req, res) => {
     booking.artistCancelReason = reason;
     await booking.save();
 
-    // Shadow ban if 3 cancellations
+    // Check shadow ban (3 cancellations in 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const cancellationCount = await Cancellation.countDocuments({
+      artistId: req.user._id,
+      createdAt: { $gte: sevenDaysAgo },
+    });
+
     const artist = await Artist.findById(req.user._id);
 
     if (cancellationCount >= 3) {
-      const bannedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      const bannedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       artist.shadowBan = {
         isShadowBanned: true,
         bannedUntil,
@@ -568,17 +616,122 @@ export const cancelBooking = async (req, res) => {
       await artist.save();
 
       return res.status(200).json({
-        message: "Booking cancelled. You have been shadow banned for 30 days due to multiple cancellations.",
+        message: "Booking cancelled. 100% refund processed. You have been shadow banned for 30 days.",
         booking,
+        refund: payment?.refund,
       });
     }
 
     return res.status(200).json({
-      message: `Booking cancelled. You have ${3 - cancellationCount} cancellations left before shadow ban.`,
+      message: "Booking cancelled. 100% refund processed.",
       booking,
+      refund: payment?.refund,
+      cancellationsLeft: 3 - cancellationCount,
     });
   } catch (err) {
-    console.error("cancelBooking error:", err);
+    console.error("cancelBookingByArtist error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * USER → CANCEL BOOKING (with refund policy)
+ */
+export const cancelBookingByUser = async (req, res) => {
+  try {
+    const { bookingId, reason } = req.body;
+
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Authorization - only user who made the booking can cancel
+    if (booking.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // Only allow cancellation if not already cancelled
+    if (booking.status === "CANCELLED") {
+      return res.status(400).json({ message: "Booking is already cancelled" });
+    }
+
+    const payment = await Payment.findOne({ bookingId });
+
+    if (!payment || payment.advancePaymentStatus !== "COMPLETED") {
+      return res.status(400).json({
+        message: "No completed payment found. Cannot cancel.",
+      });
+    }
+
+    // Calculate refund based on days before event
+    const refundPercentage = calculateRefundPercentage(booking.eventDate);
+    const refundAmount = (payment.advanceAmount * refundPercentage) / 100;
+    const daysBeforeEvent = Math.ceil(
+      (new Date(booking.eventDate) - new Date()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Process refund
+    try {
+      const refundResult = await createRefund(
+        payment.advancePaymentOrder.razorpayPaymentId,
+        refundAmount
+      );
+
+      payment.refund = {
+        isRefundRequested: true,
+        refundReason: reason,
+        daysBeforeEvent,
+        refundPercentage,
+        refundAmount,
+        razorpayPaymentId: payment.advancePaymentOrder.razorpayPaymentId,
+        razorpayRefundId: refundResult.refundId,
+        refundStatus: "PROCESSING",
+        refundInitiatedAt: new Date(),
+      };
+      await payment.save();
+    } catch (refundErr) {
+      console.error("User cancellation refund error:", refundErr);
+      payment.refund = {
+        isRefundRequested: true,
+        refundReason: reason,
+        daysBeforeEvent,
+        refundPercentage,
+        refundAmount,
+        refundStatus: "FAILED",
+        refundError: refundErr.message,
+      };
+      await payment.save();
+    }
+
+    // Record cancellation
+    await Cancellation.create({
+      artistId: booking.artistId,
+      bookingId,
+      userId: req.user._id,
+      cancelledBy: "user",
+      reason,
+      refund: payment.refund,
+    });
+
+    // Update booking
+    booking.status = "CANCELLED";
+    booking.userCancelledAt = new Date();
+    booking.userCancelReason = reason;
+    await booking.save();
+
+    return res.status(200).json({
+      message: `Booking cancelled. ${refundPercentage}% refund (₹${Math.round(refundAmount)}) will be credited to your account.`,
+      booking,
+      refund: {
+        percentage: refundPercentage,
+        amount: Math.round(refundAmount),
+        daysBeforeEvent,
+      },
+    });
+  } catch (err) {
+    console.error("cancelBookingByUser error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

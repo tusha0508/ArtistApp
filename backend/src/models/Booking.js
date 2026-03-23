@@ -32,18 +32,13 @@ const bookingSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["REQUESTED",        // user → artist
-    "COUNTER_OFFER",    // artist → user
-    "ACCEPTED",         // artist accepted directly (pending payment)
-    "PAYMENT_PENDING",  // awaiting advance payment
-    "CONFIRMED",        // user accepted counter (pending payment)
-    "PAYMENT_FAILED",   // advance payment failed
-    "ACTIVE",           // advance payment successful, event is live
-    "COMPLETED",        // event completed, awaiting remaining payment
-    "REJECTED",         // artist rejected
-    "USER_REJECTED",    // user rejected counter
-    "CANCELLED"],       // booking cancelled
-      default: "REQUESTED",
+      enum: [
+        "pending",        // awaiting advance payment
+        "partial_paid",   // advance paid, remaining 85% pending
+        "paid",           // both advance + remaining paid
+        "cancelled"       // booking cancelled with refund
+      ],
+      default: "pending",
     },
 
     paymentStatus: {
@@ -60,9 +55,12 @@ const bookingSchema = new mongoose.Schema(
     artistMessage: { type: String },
     counterOfferAmount: { type: Number },
     
+    
     // Cancellation tracking
     artistCancelledAt: Date,
     artistCancelReason: String,
+    userCancelledAt: Date,
+    userCancelReason: String,
   },
   { timestamps: true }
 );
